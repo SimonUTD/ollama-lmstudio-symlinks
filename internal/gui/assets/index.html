@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ollama ↔ LM Studio 同步</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="title">Ollama ↔ LM Studio 模型同步</div>
+      <div id="status" class="status">加载中…</div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>配置</h2>
+        <div class="grid">
+          <label>
+            <div class="label">LM Studio models 目录</div>
+            <input id="lmstudioModelsDir" type="text" />
+          </label>
+          <label>
+            <div class="label">Ollama models 目录</div>
+            <input id="ollamaModelsDir" type="text" />
+          </label>
+          <label>
+            <div class="label">OLLAMA_HOST</div>
+            <input id="ollamaHost" type="text" placeholder="127.0.0.1:11434" />
+          </label>
+          <label>
+            <div class="label">ollama 可执行文件路径（可选）</div>
+            <input id="ollamaBin" type="text" placeholder="/Applications/Ollama.app/Contents/Resources/ollama" />
+          </label>
+        </div>
+
+        <div class="row">
+          <button id="saveConfig" class="btn primary">保存配置</button>
+          <button id="reloadStatus" class="btn">刷新状态</button>
+          <div id="saveHint" class="hint"></div>
+        </div>
+
+        <div class="options">
+          <label class="checkbox">
+            <input id="allowFixSymlink" type="checkbox" />
+            <span>允许修复指向错误的 symlink（Ollama → LM Studio）</span>
+          </label>
+          <label class="checkbox">
+            <input id="allowRecreateBrokenSymlink" type="checkbox" />
+            <span>允许重建断链 symlink（Ollama → LM Studio）</span>
+          </label>
+          <label class="checkbox">
+            <input id="allowReplaceExistingBlob" type="checkbox" />
+            <span>允许替换“已存在的 Ollama blob”为 symlink（LM Studio → Ollama，风险更高）</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>同步</h2>
+        <div class="row">
+          <label class="radio">
+            <input type="radio" name="direction" value="ollama_to_lmstudio" checked />
+            <span>Ollama → LM Studio</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="direction" value="lmstudio_to_ollama" />
+            <span>LM Studio → Ollama（仅 .gguf）</span>
+          </label>
+          <button id="scan" class="btn">扫描</button>
+          <button id="apply" class="btn primary">执行同步</button>
+        </div>
+
+        <div class="row">
+          <button id="selectAll" class="btn small">全选</button>
+          <button id="selectNone" class="btn small">全不选</button>
+          <div id="scanHint" class="hint"></div>
+        </div>
+
+        <div class="tableWrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width: 44px;"></th>
+                <th>条目</th>
+                <th style="width: 160px;">状态</th>
+                <th style="width: 260px;">Ollama 名称（LM→O 可编辑）</th>
+              </tr>
+            </thead>
+            <tbody id="items"></tbody>
+          </table>
+        </div>
+
+        <div class="results">
+          <h3>结果</h3>
+          <pre id="results"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
+

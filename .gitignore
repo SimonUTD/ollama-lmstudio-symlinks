@@ -1,0 +1,23 @@
+# Build outputs
+ollama-symlinks
+ollama-symlinks-*
+*.exe
+
+# macOS
+.DS_Store
+
+# Go
+*.out
+*.test
+*.prof
+.gocache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
