@@ -50,6 +50,11 @@
 - 使用 `OLLAMA_HOST`/配置（默认 `127.0.0.1:11434`）做 TCP dial 检测
 - **不自动启动** `ollama serve`
 
+### 4) LM Studio → Ollama 的默认模型名称（不“发明名字”）
+
+- 默认使用 LM Studio 现有目录：`<provider>/<modelDir>` 作为 Ollama 的 repo（不指定 tag 则为 `latest`）
+- 执行前强校验 Ollama 名称合法性；不合法时需要在 GUI 中编辑后再同步（避免先拷贝大文件再失败）
+
 ## 安全与边界
 
 - GUI 前端渲染使用 DOM + `textContent`（不使用 `innerHTML`）避免 XSS。
@@ -71,4 +76,3 @@
    - Ollama 不可用/服务不可连接：执行时返回明确错误并在 GUI 展示。
 3. O → L：保持现有能力，并准确识别已有 symlink（正确/错误/断链/冲突）。
 4. README 为中文，包含使用方式与风险提示。
-

@@ -178,3 +178,67 @@ func TestHandleApply_LMStudioToOllama_RejectsOutsideLMStudioDir(t *testing.T) {
 		t.Fatalf("expected error about outside dir, got: %q", resp.Error)
 	}
 }
+
+func TestHandleApply_LMStudioToOllama_RejectsDuplicateModelName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	lms := filepath.Join(root, "lmstudio-models")
+
+	dir1 := filepath.Join(lms, "providerA", "Model-One")
+	if err := os.MkdirAll(dir1, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	p1 := filepath.Join(dir1, "one.gguf")
+	if err := os.WriteFile(p1, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write gguf1: %v", err)
+	}
+
+	dir2 := filepath.Join(lms, "providerA", "Model-Two")
+	if err := os.MkdirAll(dir2, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	p2 := filepath.Join(dir2, "two.gguf")
+	if err := os.WriteFile(p2, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write gguf2: %v", err)
+	}
+
+	cfg := config.Default()
+	cfg.LMStudioModelsDir = lms
+	cfg.OllamaModelsDir = filepath.Join(root, "ollama-models")
+
+	srv := New(filepath.Join(root, "cfg.json"), cfg)
+	h, err := srv.Handler()
+	if err != nil {
+		t.Fatalf("Handler: %v", err)
+	}
+
+	reqBody := applyRequest{
+		Direction: "lmstudio_to_ollama",
+		Imports: []lmImport{
+			{GGUFPath: p1, ModelName: "dup"},
+			{GGUFPath: p2, ModelName: "dup"},
+		},
+	}
+	raw, err := json.Marshal(reqBody)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/api/apply", bytes.NewReader(raw))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: expected %d, got %d (%s)", http.StatusOK, w.Code, strings.TrimSpace(w.Body.String()))
+	}
+
+	var resp applyResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !strings.Contains(resp.Error, "重复的 modelName") {
+		t.Fatalf("expected duplicate modelName error, got: %q", resp.Error)
+	}
+}

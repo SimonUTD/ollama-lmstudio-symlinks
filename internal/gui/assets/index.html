@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ollama ↔ LM Studio 同步</title>
-    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="header">
@@ -72,9 +72,15 @@
         </div>
 
         <div class="row">
+          <div id="lmstudioTabs" class="tabs hidden">
+            <button id="tabSupported" class="tab active" type="button">可同步</button>
+            <button id="tabUnsupported" class="tab" type="button">不支持</button>
+            <button id="tabAll" class="tab" type="button">全部</button>
+          </div>
           <button id="selectAll" class="btn small">全选</button>
           <button id="selectNone" class="btn small">全不选</button>
           <div id="scanHint" class="hint"></div>
+          <div id="actionHint" class="hint"></div>
         </div>
 
         <div class="tableWrap">
@@ -98,7 +104,6 @@
       </section>
     </main>
 
-    <script src="/assets/app.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>
-

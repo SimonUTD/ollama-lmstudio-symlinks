@@ -72,7 +72,7 @@ func buildOllamaModelIndex(ollamaModelsDir string) (map[string]ollama.Discovered
 
 	byKey := make(map[string]ollama.DiscoveredModel, len(models))
 	for _, m := range models {
-		byKey[idFromRepoTag(m.ID.Repository, m.ID.Tag)] = m
+		byKey[idFromRepoTag(ollama.RepoForCLI(m.ID), m.ID.Tag)] = m
 	}
 	return byKey, nil
 }
@@ -86,13 +86,27 @@ func ggufDirKeySet(files []lmstudio.GGUFFile) map[string]bool {
 }
 
 func scanItemFromGGUFFile(cfg config.Config, f lmstudio.GGUFFile, byKey map[string]ollama.DiscoveredModel) scanItem {
+	label := f.Provider + "/" + f.ModelDir + "/" + f.FileName
+	detail := f.FullPath + " (" + strconv.FormatInt(f.SizeBytes, 10) + " bytes)"
+
 	suggested := suggestOllamaName(f)
+	if err := ollama.ValidateModelName(suggested); err != nil {
+		return scanItem{
+			ID:         f.FullPath,
+			Label:      label,
+			Detail:     detail,
+			Status:     "invalid_name",
+			Selectable: true,
+			Selected:   false,
+			Message:    err.Error(),
+			GGUFPath:   f.FullPath,
+			ModelName:  suggested,
+		}
+	}
+
 	key := idFromRepoTag(suggested, "latest")
 	existing, ok := byKey[key]
 	status, message := statusForGGUFImport(cfg, f, existing, ok)
-
-	label := f.Provider + "/" + f.ModelDir + "/" + f.FileName
-	detail := f.FullPath + " (" + strconv.FormatInt(f.SizeBytes, 10) + " bytes)"
 
 	return scanItem{
 		ID:         f.FullPath,
@@ -120,17 +134,26 @@ func statusForGGUFImport(cfg config.Config, f lmstudio.GGUFFile, existing ollama
 	if st.Kind == symlink.KindSymlink && st.IsSymlinkMatch && !st.IsSymlinkBroken {
 		return "already_linked", ""
 	}
-	return "conflict", ""
+	return "conflict", "模型已存在但未链接到该 .gguf；如确认要替换为 symlink，请开启“允许替换已存在的 Ollama blob”为 symlink"
 }
 
 func validateLMStudioImports(cfg config.Config, imports []lmImport) ([]modelsync.LMStudioToOllamaSpec, error) {
 	specs := make([]modelsync.LMStudioToOllamaSpec, 0, len(imports))
+	seenNames := make(map[string]string, len(imports))
 	for _, it := range imports {
 		if strings.TrimSpace(it.GGUFPath) == "" {
-			return nil, fmt.Errorf("empty ggufPath")
+			return nil, fmt.Errorf("ggufPath 不能为空")
 		}
-		if strings.TrimSpace(it.ModelName) == "" {
-			return nil, fmt.Errorf("empty modelName for %s", it.GGUFPath)
+		modelName := strings.TrimSpace(it.ModelName)
+		if modelName == "" {
+			return nil, fmt.Errorf("modelName 不能为空：%s", it.GGUFPath)
+		}
+		if prev, ok := seenNames[modelName]; ok {
+			return nil, fmt.Errorf("重复的 modelName（%s）：%s 与 %s（请修改名称或只选择一个）", modelName, prev, it.GGUFPath)
+		}
+		seenNames[modelName] = it.GGUFPath
+		if err := ollama.ValidateModelName(modelName); err != nil {
+			return nil, fmt.Errorf("modelName 不符合 Ollama 规则（%s）：%w", modelName, err)
 		}
 		if !strings.EqualFold(filepath.Ext(it.GGUFPath), ".gguf") {
 			return nil, fmt.Errorf("仅支持 .gguf：%s", it.GGUFPath)
@@ -153,7 +176,7 @@ func validateLMStudioImports(cfg config.Config, imports []lmImport) ([]modelsync
 		}
 
 		specs = append(specs, modelsync.LMStudioToOllamaSpec{
-			ModelName: it.ModelName,
+			ModelName: modelName,
 			GGUFPath:  it.GGUFPath,
 		})
 	}
@@ -188,28 +211,43 @@ func requireOllamaRunner(ctx context.Context, cfg config.Config) (ollamaexec.Exe
 }
 
 func suggestOllamaName(f lmstudio.GGUFFile) string {
-	base := strings.TrimSuffix(f.FileName, filepath.Ext(f.FileName))
-	return sanitizeOllamaName(strings.ToLower(f.Provider + "-" + f.ModelDir + "-" + base))
+	return suggestOllamaNameForDir(f.Provider, f.ModelDir)
 }
 
 func suggestOllamaNameForDir(provider string, modelDir string) string {
-	return sanitizeOllamaName(strings.ToLower(provider + "-" + modelDir))
+	providerPart := sanitizeOllamaNamePart(strings.ToLower(provider))
+	modelPart := sanitizeOllamaNamePart(strings.ToLower(modelDir))
+
+	if providerPart == "" && modelPart == "" {
+		return "lmstudio-import"
+	}
+	if providerPart == "" {
+		return modelPart
+	}
+	if modelPart == "" {
+		return providerPart
+	}
+	return providerPart + "/" + modelPart
 }
 
-func sanitizeOllamaName(raw string) string {
+func sanitizeOllamaNamePart(raw string) string {
 	var b strings.Builder
 	b.Grow(len(raw))
+	var lastDash bool
 	for _, r := range raw {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
 			b.WriteRune(r)
+			lastDash = false
 			continue
 		}
-		b.WriteByte('-')
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
 	}
 	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		return "lmstudio-import"
-	}
+	out = strings.TrimLeft(out, ".-")
+	out = strings.Trim(out, "-")
 	return out
 }
 

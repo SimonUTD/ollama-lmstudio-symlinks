@@ -90,8 +90,8 @@ Go 二进制只会继承“启动它的进程”的环境变量：
 - 使用 `ollama create` 走官方路径更稳，出错也更可诊断（错误信息更清晰）。
 
 **命名规则（可配置）**：
-- 默认从 LM Studio 目录推导：`<provider>/<model>/<filename>` → 规范化为 `provider-model-filename`（去扩展名）
-- GUI 允许用户对每个条目编辑最终 Ollama 模型名（避免冲突）
+- 默认从 LM Studio 目录推导：`<provider>/<model>` → 规范化为 `provider/model`（不指定 tag 则为 `latest`）
+- GUI 允许用户对每个条目编辑最终 Ollama 模型名（避免冲突/超长/不符合规则）
 
 ## Ollama 安装与服务检测
 

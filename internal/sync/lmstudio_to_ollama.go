@@ -67,7 +67,14 @@ func applyOneLMStudioToOllama(ctx context.Context, spec LMStudioToOllamaSpec, ol
 		if alreadyLinked {
 			return ApplyLMStudioToOllamaResult{ModelName: spec.ModelName, Note: "already linked"}, nil
 		}
-		return ApplyLMStudioToOllamaResult{}, fmt.Errorf("model exists but is not linked to the selected gguf")
+		if !opts.AllowReplaceExistingBlob {
+			return ApplyLMStudioToOllamaResult{}, fmt.Errorf("model exists but is not linked to the selected gguf")
+		}
+		blobPath := blobPathFromDigest(ollamaModelsDir, model.ModelLayerDigest)
+		if err := replaceFileWithSymlink(blobPath, spec.GGUFPath); err != nil {
+			return ApplyLMStudioToOllamaResult{}, err
+		}
+		return ApplyLMStudioToOllamaResult{ModelName: spec.ModelName, Note: "relinked"}, nil
 	}
 
 	if err := runner.CreateFromGGUF(ctx, spec.ModelName, spec.GGUFPath); err != nil {
@@ -123,7 +130,7 @@ func parseModelName(name string) modelRef {
 
 func findModel(models []ollama.DiscoveredModel, repo string, tag string) (ollama.DiscoveredModel, bool) {
 	for _, m := range models {
-		if m.ID.Repository == repo && m.ID.Tag == tag {
+		if ollama.RepoForCLI(m.ID) == repo && m.ID.Tag == tag {
 			return m, true
 		}
 	}

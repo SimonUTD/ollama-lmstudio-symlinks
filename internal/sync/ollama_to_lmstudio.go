@@ -33,7 +33,7 @@ func ApplyOllamaToLMStudio(models []ollama.DiscoveredModel, ollamaModelsDir stri
 	for _, m := range models {
 		r, err := applyOneOllamaToLMStudio(m, ollamaModelsDir, providerDir, opts)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", m.ID.Repository, err))
+			errs = append(errs, fmt.Errorf("%s: %w", ollama.RepoForCLI(m.ID), err))
 			continue
 		}
 		results = append(results, r)
@@ -72,7 +72,7 @@ func applyOneOllamaToLMStudio(model ollama.DiscoveredModel, ollamaModelsDir stri
 }
 
 func lmStudioSafeNameFromOllama(id ollama.ModelID) string {
-	repo := strings.ReplaceAll(id.Repository, "/", "-")
+	repo := strings.ReplaceAll(ollama.RepoForCLI(id), "/", "-")
 	if id.Tag == "" {
 		return repo
 	}

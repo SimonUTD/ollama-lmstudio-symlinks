@@ -88,6 +88,30 @@ input[type="text"] {
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .hint { color: var(--muted); font-size: 13px; }
+.hidden { display: none; }
+
+.tabs {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.tab:not(:last-child) { border-right: 1px solid var(--border); }
+.tab.active {
+  background: #0f1117;
+  color: var(--text);
+  font-weight: 700;
+}
 
 .options { display: grid; gap: 8px; margin-top: 10px; }
 .checkbox { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
@@ -122,4 +146,3 @@ pre {
   overflow: auto;
   max-height: 320px;
 }
-

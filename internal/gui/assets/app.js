@@ -32,7 +32,80 @@ function badgeEl(status) {
   return span;
 }
 
+let lastScanItems = [];
 let currentItems = [];
+let viewMode = "all"; // all | supported | unsupported
+let selectionById = {};
+let modelNameById = {};
+let busy = false;
+
+function setActionHint(msg) {
+  el("actionHint").textContent = msg || "";
+}
+
+function setBusy(v) {
+  busy = !!v;
+  const buttons = ["saveConfig", "reloadStatus", "scan", "apply", "selectAll", "selectNone"];
+  for (const id of buttons) {
+    const node = el(id);
+    if (node) node.disabled = busy;
+  }
+  const radios = document.querySelectorAll("input[name=direction]");
+  for (const r of radios) r.disabled = busy;
+}
+
+function setTabsVisible(visible) {
+  const tabs = el("lmstudioTabs");
+  if (!tabs) return;
+  tabs.classList.toggle("hidden", !visible);
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  const ids = ["tabSupported", "tabUnsupported", "tabAll"];
+  for (const id of ids) {
+    const b = el(id);
+    if (!b) continue;
+    b.classList.toggle("active", id === "tab" + mode[0].toUpperCase() + mode.slice(1));
+  }
+  renderFiltered();
+}
+
+function updateTabs(items, dir) {
+  if (dir !== "lmstudio_to_ollama") return;
+  const total = items.length;
+  const unsupported = items.filter(i => i.status === "unsupported").length;
+  const supported = total - unsupported;
+
+  el("tabSupported").textContent = `可同步 (${supported})`;
+  el("tabUnsupported").textContent = `不支持 (${unsupported})`;
+  el("tabAll").textContent = `全部 (${total})`;
+}
+
+function filterItems(items, dir) {
+  if (dir !== "lmstudio_to_ollama") return items;
+  if (viewMode === "supported") return items.filter(i => i.status !== "unsupported");
+  if (viewMode === "unsupported") return items.filter(i => i.status === "unsupported");
+  return items;
+}
+
+function updateScanHint(dir) {
+  const total = lastScanItems.length;
+  const displayed = currentItems.length;
+  const selected = lastScanItems.filter(i => i.selectable !== false && selectionById[i.id]).length;
+  if (dir === "lmstudio_to_ollama") {
+    el("scanHint").textContent = `显示 ${displayed}/${total} 条 | 已选 ${selected} 条`;
+    return;
+  }
+  el("scanHint").textContent = `共 ${total} 条 | 已选 ${selected} 条`;
+}
+
+function renderFiltered() {
+  const dir = direction();
+  const filtered = filterItems(lastScanItems, dir);
+  renderItems(filtered, dir);
+  updateScanHint(dir);
+}
 
 function renderItems(items, dir) {
   currentItems = items;
@@ -45,9 +118,14 @@ function renderItems(items, dir) {
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.checked = !!item.selected;
+    const checked = selectionById[item.id];
+    checkbox.checked = checked === undefined ? !!item.selected : !!checked;
     checkbox.disabled = disabled;
     checkbox.dataset.id = item.id;
+    checkbox.addEventListener("change", () => {
+      selectionById[item.id] = checkbox.checked;
+      updateScanHint(dir);
+    });
 
     const td0 = document.createElement("td");
     td0.appendChild(checkbox);
@@ -74,10 +152,13 @@ function renderItems(items, dir) {
     if (dir === "lmstudio_to_ollama") {
       const input = document.createElement("input");
       input.type = "text";
-      input.value = item.modelName || "";
+      input.value = modelNameById[item.id] || item.modelName || "";
       input.disabled = disabled;
       input.dataset.id = item.id;
       input.className = "modelName";
+      input.addEventListener("input", () => {
+        modelNameById[item.id] = input.value;
+      });
       td3.appendChild(input);
     } else {
       td3.textContent = "-";
@@ -131,56 +212,90 @@ async function saveConfig() {
 }
 
 async function scan() {
-  el("scanHint").textContent = "";
-  el("results").textContent = "";
+  el("scanHint").textContent = "扫描中…";
   const dir = direction();
-  const res = await fetchJSON("/api/scan", {
-    method: "POST",
-    body: JSON.stringify({ direction: dir }),
-  });
-  renderItems(res.items || [], dir);
-  el("scanHint").textContent = `共 ${res.items ? res.items.length : 0} 条`;
+  setBusy(true);
+  try {
+    const res = await fetchJSON("/api/scan", {
+      method: "POST",
+      body: JSON.stringify({ direction: dir }),
+    });
+    lastScanItems = res.items || [];
+    selectionById = {};
+    modelNameById = {};
+    for (const it of lastScanItems) {
+      selectionById[it.id] = !!it.selected;
+      if (it.modelName) modelNameById[it.id] = it.modelName;
+    }
+
+    setTabsVisible(dir === "lmstudio_to_ollama");
+    updateTabs(lastScanItems, dir);
+    if (dir === "lmstudio_to_ollama") setViewMode("supported");
+    else setViewMode("all");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function setSelection(value) {
-  const boxes = document.querySelectorAll("#items input[type=checkbox]");
-  for (const b of boxes) {
-    if (!b.disabled) b.checked = value;
+  for (const it of lastScanItems) {
+    if (it.selectable === false) {
+      selectionById[it.id] = false;
+      continue;
+    }
+    selectionById[it.id] = !!value;
   }
+  renderFiltered();
 }
 
 async function apply() {
   el("results").textContent = "";
+  setActionHint("");
   const dir = direction();
 
-  const selectedIDs = [];
-  const boxes = document.querySelectorAll("#items input[type=checkbox]");
-  for (const b of boxes) {
-    if (b.checked && !b.disabled) selectedIDs.push(b.dataset.id);
+  const selectedIDs = lastScanItems
+    .filter(i => i.selectable !== false && selectionById[i.id])
+    .map(i => i.id);
+  if (selectedIDs.length === 0) {
+    setActionHint("未选择任何模型");
+    return;
   }
 
   const payload = { direction: dir, selected: selectedIDs, imports: [] };
   if (dir === "lmstudio_to_ollama") {
-    const inputs = document.querySelectorAll("#items input.modelName");
-    const mapName = {};
-    for (const i of inputs) mapName[i.dataset.id] = i.value;
-
-    for (const item of currentItems) {
-      if (!selectedIDs.includes(item.id)) continue;
+    const byId = {};
+    for (const it of lastScanItems) byId[it.id] = it;
+    for (const id of selectedIDs) {
+      const item = byId[id];
       payload.imports.push({
         ggufPath: item.ggufPath,
-        modelName: mapName[item.id] || item.modelName || "",
+        modelName: modelNameById[id] || item.modelName || "",
       });
     }
   }
 
-  const res = await fetchJSON("/api/apply", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-  el("results").textContent = JSON.stringify(res, null, 2);
-  await scan();
+  setBusy(true);
+  const started = Date.now();
+  setActionHint(`同步中…（${selectedIDs.length} 项）`);
+  try {
+    const res = await fetchJSON("/api/apply", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    el("results").textContent = JSON.stringify(res, null, 2);
+    const ms = Date.now() - started;
+    if (res && res.error) {
+      setActionHint(`同步失败（耗时 ${(ms / 1000).toFixed(1)}s）`);
+    } else {
+      setActionHint(`同步完成（耗时 ${(ms / 1000).toFixed(1)}s）`);
+    }
+    await scan();
+  } catch (e) {
+    setActionHint(`同步失败：${e.message}`);
+    throw e;
+  } finally {
+    setBusy(false);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -190,6 +305,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   el("apply").addEventListener("click", () => apply().catch(e => el("results").textContent = e.message));
   el("selectAll").addEventListener("click", () => setSelection(true));
   el("selectNone").addEventListener("click", () => setSelection(false));
+  el("tabSupported").addEventListener("click", () => setViewMode("supported"));
+  el("tabUnsupported").addEventListener("click", () => setViewMode("unsupported"));
+  el("tabAll").addEventListener("click", () => setViewMode("all"));
 
   await loadConfigAndStatus().catch(e => el("status").textContent = e.message);
   await scan().catch(e => el("scanHint").textContent = e.message);

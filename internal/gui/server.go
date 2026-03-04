@@ -43,14 +43,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.HandleFunc("/api/scan", s.handleScan)
 	mux.HandleFunc("/api/apply", s.handleApply)
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			r.URL.Path = "/index.html"
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		fileServer.ServeHTTP(w, r)
-	})
+	mux.Handle("/", fileServer)
 
 	return mux, nil
 }

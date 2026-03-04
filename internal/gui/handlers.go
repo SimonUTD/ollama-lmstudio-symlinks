@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -72,6 +73,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	log.Printf("scan: direction=%s", req.Direction)
 
 	cfg := s.cfgSnapshot()
 	items, err := scanItems(cfg, req.Direction)
@@ -106,6 +108,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	log.Printf("apply: direction=%s selected=%d imports=%d", req.Direction, len(req.Selected), len(req.Imports))
 
 	cfg := s.cfgSnapshot()
 	resp := applyResponse{}
@@ -116,6 +119,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		resp.Result = result
 		if err != nil {
 			resp.Error = err.Error()
+			log.Printf("apply error: direction=%s err=%v", req.Direction, err)
 		}
 		writeJSON(w, http.StatusOK, resp)
 	case dirLMStudioToOllama:
@@ -123,6 +127,7 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		resp.Result = result
 		if err != nil {
 			resp.Error = err.Error()
+			log.Printf("apply error: direction=%s err=%v", req.Direction, err)
 		}
 		writeJSON(w, http.StatusOK, resp)
 	default:
@@ -138,7 +143,7 @@ func scanOllamaToLMStudio(cfg config.Config) ([]scanItem, error) {
 
 	items := make([]scanItem, 0, len(models))
 	for _, m := range models {
-		repo, tag := m.ID.Repository, m.ID.Tag
+		repo, tag := ollama.RepoForCLI(m.ID), m.ID.Tag
 		safeName := lmStudioSafeName(repo, tag)
 
 		source := filepath.Join(cfg.OllamaModelsDir, "blobs", strings.Replace(m.ModelLayerDigest, ":", "-", 1))
@@ -179,7 +184,7 @@ func applyOllamaToLMStudio(cfg config.Config, selected []string) (any, error) {
 
 	var picked []ollama.DiscoveredModel
 	for _, m := range models {
-		id := idFromRepoTag(m.ID.Repository, m.ID.Tag)
+		id := idFromRepoTag(ollama.RepoForCLI(m.ID), m.ID.Tag)
 		if selectedSet[id] {
 			picked = append(picked, m)
 		}
